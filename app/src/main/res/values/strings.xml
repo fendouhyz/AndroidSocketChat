@@ -17,5 +17,9 @@
     <string name="set_port">设定端口号：</string>
 
     <string name="create">创建</string>
+    <string name="destroy">销毁</string>
+    <string name="create_success_will_create_qrcode">创建服务成功将会生成二维码：</string>
+    <string name="disconnect">断开</string>
+    <string name="scan">扫描</string>
 
 </resources>

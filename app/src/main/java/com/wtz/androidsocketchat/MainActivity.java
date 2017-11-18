@@ -1,10 +1,15 @@
 package com.wtz.androidsocketchat;
 
+import android.Manifest;
+import android.annotation.TargetApi;
 import android.app.Activity;
-import android.app.Fragment;
-import android.app.FragmentManager;
-import android.app.FragmentTransaction;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentTransaction;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
@@ -12,7 +17,14 @@ import android.view.Window;
 import android.widget.Button;
 import android.widget.TextView;
 
-public class MainActivity extends Activity {
+import com.wtz.androidsocketchat.utils.IPHelper;
+import com.wtz.androidsocketchat.view.FragmentClient;
+import com.wtz.androidsocketchat.view.FragmentServer;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MainActivity extends FragmentActivity {
     private final String TAG = MainActivity.class.getName();
 
     private TextView tvLocalIp;
@@ -22,6 +34,12 @@ public class MainActivity extends Activity {
     private FragmentManager fragmentManager;
     private Fragment mFragmentLeft;
     private Fragment mFragmentRight;
+
+    private String[] permissions = new String[]{
+            Manifest.permission.CAMERA,
+    };
+    private List<String> mPermissionList = new ArrayList<>();
+    private final static int REQUEST_PERMISSIONS_CODE = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,10 +54,16 @@ public class MainActivity extends Activity {
         btnLeft.setOnClickListener(btnClick);
         btnRight.setOnClickListener(btnClick);
 
-        fragmentManager = getFragmentManager();
+        fragmentManager = getSupportFragmentManager();
         
         updateLocalIP();
         setTabSelection(0);
+        btnLeft.setBackgroundResource(R.drawable.bg_yellow);
+        btnRight.setBackgroundResource(R.drawable.bg_gray);
+
+        if (Build.VERSION.SDK_INT >= 23) {
+            judgePermission();
+        }
     }
 
     private void updateLocalIP() {
@@ -86,9 +110,13 @@ public class MainActivity extends Activity {
         public void onClick(View v) {
             switch (v.getId()) {
             case R.id.btn_left:
+                btnLeft.setBackgroundResource(R.drawable.bg_yellow);
+                btnRight.setBackgroundResource(R.drawable.bg_gray);
                 setTabSelection(0);
                 break;
             case R.id.btn_right:
+                btnRight.setBackgroundResource(R.drawable.bg_yellow);
+                btnLeft.setBackgroundResource(R.drawable.bg_gray);
                 setTabSelection(1);
                 break;
 
@@ -130,6 +158,47 @@ public class MainActivity extends Activity {
         }
         if (mFragmentRight != null) {
             transaction.hide(mFragmentRight);
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.M)
+    private void judgePermission() {
+        mPermissionList.clear();
+        for (int i = 0; i < permissions.length; i++) {
+            if (checkSelfPermission(permissions[i]) != PackageManager.PERMISSION_GRANTED) {
+                mPermissionList.add(permissions[i]);
+            }
+        }
+        if (mPermissionList.isEmpty()) {//未授予的权限为空，表示都授予了
+            // TODO: 2017/10/9
+        } else {//请求权限方法
+            String[] permissions = mPermissionList.toArray(new String[mPermissionList.size()]);//将List转为数组
+            this.requestPermissions(permissions, REQUEST_PERMISSIONS_CODE);
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.M)
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        switch (requestCode) {
+            case REQUEST_PERMISSIONS_CODE:
+                for (int i = 0; i < grantResults.length; i++) {
+                    if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                        //判断是否勾选禁止后不再询问
+                        boolean showRequestPermission = this.shouldShowRequestPermissionRationale(permissions[i]);
+                        if (showRequestPermission) {//
+//                            judgePermission();//重新申请权限
+//                            return;
+                        } else {
+                            //已经禁止
+                        }
+                    }
+                }
+                // TODO: 2017/9/29 Do something
+                break;
+            default:
+                break;
         }
     }
 }

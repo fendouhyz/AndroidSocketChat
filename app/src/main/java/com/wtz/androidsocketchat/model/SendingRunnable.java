@@ -1,4 +1,4 @@
-package com.wtz.androidsocketchat;
+package com.wtz.androidsocketchat.model;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -25,7 +25,7 @@ public class SendingRunnable implements Runnable {
 
     @Override
     public void run() {
-        while (true) {
+        while (mSocket != null && !mSocket.isClosed()) {
             try {
                 String msg = mMessageQueue.take();
                 sendMessage(msg);

@@ -1,10 +1,10 @@
-package com.wtz.androidsocketchat;
+package com.wtz.androidsocketchat.model;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
 
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
@@ -37,8 +37,12 @@ public class ReceivingRunnable implements Runnable {
                 messageStr = input.readLine();
                 if (messageStr != null) {
                     Log.d(TAG, "Read from the stream: " + messageStr);
+                    Bundle messageBundle = new Bundle();
+                    messageBundle.putString("msg", messageStr);
+                    messageBundle.putString("address", mSocket.getInetAddress().getHostAddress());
+                    messageBundle.putBoolean("isLocal", false);
                     Message msg = mReceivingHandler.obtainMessage();
-                    msg.obj = messageStr;
+                    msg.setData(messageBundle);
                     mReceivingHandler.sendMessage(msg);
                 } else {
                     Log.d(TAG, "The nulls! The nulls!");

@@ -1,10 +1,13 @@
-package com.wtz.androidsocketchat;
+package com.wtz.androidsocketchat.view;
 
 import android.app.Activity;
-import android.app.Fragment;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -12,25 +15,34 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.dtr.zxing.activity.CaptureActivity;
+import com.dtr.zxing.decode.DecodeThread;
+import com.wtz.androidsocketchat.R;
+import com.wtz.androidsocketchat.control.ClientHandler;
+
+import static android.app.Activity.RESULT_OK;
 
 public class FragmentClient extends Fragment {
     private final String TAG = FragmentClient.class.getName();
 
     private Button btnConnect;
+    private Button btnDisconnect;
+    private Button btnScanQrcode;
+
     private EditText etTargetIpInput;
     private EditText etTargetPortInput;
-    
     private Button btnSent;
+
     private EditText etInput;
+    private ScrollView svChatResult;
     private TextView tvChatResult;
 
+    private ClientHandler mClientHandler;
     private Handler mUpdateHandler;
-    private SocketClient mSocketClient;
-    
-    private boolean isConnecting;
-    private Thread mConnectThread;
 
     @Override
     public void onAttach(Activity activity) {
@@ -49,11 +61,19 @@ public class FragmentClient extends Fragment {
         View view = inflater.inflate(R.layout.client, container, false);
         btnConnect = (Button) view.findViewById(R.id.btn_client_connect);
         btnConnect.setOnClickListener(mOnclick);
+
+        btnDisconnect = (Button) view.findViewById(R.id.btn_client_disconnect);
+        btnDisconnect.setOnClickListener(mOnclick);
+
+        btnScanQrcode = (Button) view.findViewById(R.id.btn_scan_qrcode);
+        btnScanQrcode.setOnClickListener(mOnclick);
+
         etTargetIpInput = (EditText) view.findViewById(R.id.et_client_target_ip_input);
         etTargetPortInput = (EditText) view.findViewById(R.id.et_client_target_port_input);
-        
+
+        svChatResult = (ScrollView) view.findViewById(R.id.sv_client_chat_result);
         tvChatResult = (TextView) view.findViewById(R.id.tv_client_chat_result);
-        
+
         btnSent = (Button) view.findViewById(R.id.btn_client_send);
         btnSent.setOnClickListener(mOnclick);
         etInput = (EditText) view.findViewById(R.id.et_client_chat_input);
@@ -61,11 +81,19 @@ public class FragmentClient extends Fragment {
         mUpdateHandler = new Handler() {
             @Override
             public void handleMessage(Message msg) {
-                String chatLine = msg.getData().getString("msg");
-                addChatLine(chatLine);
+                Bundle data = msg.getData();
+                if (data == null) {
+                    return;
+                }
+                String strMsg = "" + data.get("msg");
+                String address = "" + data.get("address");
+                boolean isLocal = data.getBoolean("isLocal");
+                showMsg(isLocal, address, strMsg);
             }
         };
-        
+
+        mClientHandler = new ClientHandler();
+
         return view;
     }
 
@@ -103,6 +131,9 @@ public class FragmentClient extends Fragment {
     public void onDestroy() {
         Log.d(TAG, "onDestroy");
         super.onDestroy();
+        if (mClientHandler != null) {
+            mClientHandler.disconnect();
+        }
     }
 
     private View.OnClickListener mOnclick = new View.OnClickListener() {
@@ -110,23 +141,40 @@ public class FragmentClient extends Fragment {
         @Override
         public void onClick(View v) {
             switch (v.getId()) {
-            case R.id.btn_client_send:
-                clickSend();
-                break;
-                
-            case R.id.btn_client_connect:
-                clickConnect();
-                break;
+                case R.id.btn_client_send:
+                    clickSend();
+                    break;
 
-            default:
-                break;
+                case R.id.btn_client_connect:
+                    clickConnect();
+                    break;
+
+                case R.id.btn_client_disconnect:
+                    clickDisconnect();
+                    break;
+
+                case R.id.btn_scan_qrcode:
+                    clickScanQrcode();
+                    break;
+
+                default:
+                    break;
             }
         }
     };
 
+    private void clickScanQrcode() {
+        startActivityForResult(new Intent(FragmentClient.this.getContext(), CaptureActivity.class), 0);
+    }
+
+    private void clickDisconnect() {
+        mClientHandler.disconnect();
+        showMsg(true, null, "已经断开");
+    }
+
     public void clickConnect() {
         Log.d(TAG, "clickConnect...");
-        
+
         final String ipString = etTargetIpInput.getText().toString();
         final String portString = etTargetPortInput.getText().toString();
         Log.d(TAG, "clickConnect...ip = " + ipString);
@@ -139,35 +187,9 @@ public class FragmentClient extends Fragment {
             toast("请输入端口号");
             return;
         }
-        
-        if (isConnecting) {
-            toast("正在连接中...");
-            return;
-        }
-        
-        if (mConnectThread != null && !mConnectThread.isInterrupted()) {
-            toast("已启动线程");
-            return;
-        }
-        
-        isConnecting = true;
-        mConnectThread = new Thread(new Runnable() {
-            
-            @Override
-            public void run() {
-                try {
-                    int port = Integer.parseInt(portString);
-                    mSocketClient = new SocketClient(ipString, port, mUpdateHandler);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    showStatus("连接异常！");
-                }
-            }
-        });
-        mConnectThread.start();
-        isConnecting = false;
+        mClientHandler.connectToServer(ipString, portString, mUpdateHandler);
     }
-    
+
     public void clickSend() {
         Log.d(TAG, "clickSend...");
         String msgString = etInput.getText().toString();
@@ -175,17 +197,28 @@ public class FragmentClient extends Fragment {
             toast("请输入内容！");
             return;
         }
-        
-        try {
-            mSocketClient.sendMsg(msgString);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        mClientHandler.send(msgString);
         etInput.setText("");
     }
 
-    public void addChatLine(String line) {
-        tvChatResult.append("\n" + line);
+    private void showMsg(boolean isLocal, String address, String message) {
+        tvChatResult.append("\n");
+        if (isLocal) {
+            tvChatResult.append("我：");
+        } else {
+            tvChatResult.append(address);
+        }
+        tvChatResult.append("\n");
+        tvChatResult.append("    ");
+        tvChatResult.append(message + "\n");
+
+        // 将光标移到最后，实现滚动条的自动滚动
+        mUpdateHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                svChatResult.fullScroll(ScrollView.FOCUS_DOWN);
+            }
+        });
     }
 
     private void toast(String msg) {
@@ -193,13 +226,23 @@ public class FragmentClient extends Fragment {
         toast.setGravity(Gravity.CENTER, 0, 0);
         toast.show();
     }
-    
-    private void showStatus(String msg) {
-        Bundle messageBundle = new Bundle();
-        messageBundle.putString("msg", msg);
 
-        Message message = new Message();
-        message.setData(messageBundle);
-        mUpdateHandler.sendMessage(message);
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        Log.d(TAG, "onActivityResult...requestCode=" + requestCode
+                + ", resultCode=" + resultCode + ", data=" + data);
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode == RESULT_OK && data != null) {
+            Bundle extras = data.getExtras();
+            String scanResult = (extras != null) ? extras.getString("result") : "";
+            String[] results = scanResult.split(":");
+            if (results.length == 2) {
+                mClientHandler.connectToServer(results[0], results[1], mUpdateHandler);
+            } else {
+                toast("扫描失败!");
+            }
+        } else {
+            toast("扫描失败!");
+        }
     }
 }

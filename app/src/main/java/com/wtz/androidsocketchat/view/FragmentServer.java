@@ -1,10 +1,10 @@
-package com.wtz.androidsocketchat;
+package com.wtz.androidsocketchat.view;
 
 import android.app.Activity;
-import android.app.Fragment;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -12,24 +12,38 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.google.zxing.WriterException;
+import com.wtz.androidsocketchat.R;
+import com.wtz.androidsocketchat.control.IResultListener;
+import com.wtz.androidsocketchat.control.ServerHandler;
+import com.wtz.androidsocketchat.utils.IPHelper;
+import com.wtz.androidsocketchat.utils.QrcodeUtil;
 
 public class FragmentServer extends Fragment {
     private final String TAG = FragmentServer.class.getName();
 
     private Button btnCreate;
+    private Button btnDetroy;
     private EditText etTargetPortInput;
-    
+
+    private TextView tvQrcodeTips;
+    private ImageView ivQrcode;
+
     private Button btnSent;
     private EditText etInput;
+    private ScrollView svChatResult;
     private TextView tvChatResult;
 
+    private ServerHandler mServerHandler;
     private Handler mUpdateHandler;
-    private SocketServer mSocketServer;
-    
-    private boolean isCreating;
-    private Thread mCreateThread;
+    private IResultListener mCreateListener;
+
+    private final static int QRCODE_SIZE = 100;
 
     @Override
     public void onAttach(Activity activity) {
@@ -48,10 +62,18 @@ public class FragmentServer extends Fragment {
         View view = inflater.inflate(R.layout.server, container, false);
         btnCreate = (Button) view.findViewById(R.id.btn_server_create);
         btnCreate.setOnClickListener(mOnclick);
+
+        btnDetroy = (Button) view.findViewById(R.id.btn_server_destroy);
+        btnDetroy.setOnClickListener(mOnclick);
+
         etTargetPortInput = (EditText) view.findViewById(R.id.et_server_port_input);
-        
+
+        tvQrcodeTips = (TextView) view.findViewById(R.id.tv_qrcode_tips);
+        ivQrcode = (ImageView) view.findViewById(R.id.iv_qrcode);
+
+        svChatResult = (ScrollView) view.findViewById(R.id.sv_server_chat_result);
         tvChatResult = (TextView) view.findViewById(R.id.tv_server_chat_result);
-        
+
         btnSent = (Button) view.findViewById(R.id.btn_server_send);
         btnSent.setOnClickListener(mOnclick);
         etInput = (EditText) view.findViewById(R.id.et_server_chat_input);
@@ -59,11 +81,35 @@ public class FragmentServer extends Fragment {
         mUpdateHandler = new Handler() {
             @Override
             public void handleMessage(Message msg) {
-                String chatLine = msg.getData().getString("msg");
-                addChatLine(chatLine);
+                Bundle data = msg.getData();
+                if (data == null) {
+                    return;
+                }
+                String strMsg = "" + data.get("msg");
+                String address = "" + data.get("address");
+                boolean isLocal = data.getBoolean("isLocal");
+                showMsg(isLocal, address, strMsg);
             }
         };
-        
+
+        mCreateListener = new IResultListener() {
+            @Override
+            public void onResult(boolean success, String error) {
+                showMsg(true, null, error);
+                if (success) {
+                    try {
+                        String text = IPHelper.getLocalIPAddress() + ":" + etTargetPortInput.getText().toString();
+                        tvQrcodeTips.setText("扫描二维码来绑定吧：");
+                        ivQrcode.setImageBitmap(QrcodeUtil.CreateQrCode(text, QRCODE_SIZE, QRCODE_SIZE));
+                    } catch (WriterException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        };
+
+        mServerHandler = new ServerHandler();
+
         return view;
     }
 
@@ -101,6 +147,9 @@ public class FragmentServer extends Fragment {
     public void onDestroy() {
         Log.d(TAG, "onDestroy");
         super.onDestroy();
+        if (mServerHandler != null) {
+            mServerHandler.destroy();
+        }
     }
 
     private View.OnClickListener mOnclick = new View.OnClickListener() {
@@ -108,19 +157,30 @@ public class FragmentServer extends Fragment {
         @Override
         public void onClick(View v) {
             switch (v.getId()) {
-            case R.id.btn_server_send:
-                clickSend();
-                break;
-                
-            case R.id.btn_server_create:
-                clickCreate();
-                break;
+                case R.id.btn_server_send:
+                    clickSend();
+                    break;
 
-            default:
-                break;
+                case R.id.btn_server_create:
+                    clickCreate();
+                    break;
+
+                case R.id.btn_server_destroy:
+                    clickDestroy();
+                    break;
+
+                default:
+                    break;
             }
         }
     };
+
+    private void clickDestroy() {
+        mServerHandler.destroy();
+        showMsg(true, null, "已经销毁");
+        ivQrcode.setImageResource(R.mipmap.default_qrcode);
+        tvQrcodeTips.setText(R.string.create_success_will_create_qrcode);
+    }
 
     public void clickCreate() {
         Log.d(TAG, "clickCreate...");
@@ -139,42 +199,10 @@ public class FragmentServer extends Fragment {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        
-        if (isCreating) {
-            toast("正在创建中...");
-            return;
-        }
-        
-        try {
-            //TODO 为何线程还在时，isAlive是false？但isInterrupted是false!
-            Log.d(TAG, "mCreateThread.isAlive() = " + mCreateThread.isAlive());
-            Log.d(TAG, "mCreateThread.isInterrupted() = " + mCreateThread.isInterrupted());
-        } catch (Exception e) {
-            // TODO: handle exception
-        }
-        if (mCreateThread != null && !mCreateThread.isInterrupted()) {
-            toast("已启动线程");
-            return;
-        }
-        
-        isCreating = true;
-        mCreateThread = new Thread(new Runnable() {
-            
-            @Override
-            public void run() {
-                try {
-                    int port = Integer.parseInt(portString);
-                    mSocketServer = new SocketServer(port, mUpdateHandler);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    showStatus("创建异常！");
-                }
-            }
-        });
-        mCreateThread.start();
-        isCreating = false;
+
+        mServerHandler.create(portString, mCreateListener, mUpdateHandler);
     }
-    
+
     public void clickSend() {
         Log.d(TAG, "clickSend...");
         String msgString = etInput.getText().toString();
@@ -182,18 +210,29 @@ public class FragmentServer extends Fragment {
             toast("请输入内容！");
             return;
         }
-        
-        try {
-            mSocketServer.sendMsg(msgString);
-        } catch (Exception e) {
-            e.printStackTrace();
-            showStatus("发送异常！");
-        }
+
+        mServerHandler.send(msgString);
         etInput.setText("");
     }
 
-    public void addChatLine(String line) {
-        tvChatResult.append("\n" + line);
+    private void showMsg(boolean isLocal, String address, String message) {
+        tvChatResult.append("\n");
+        if (isLocal) {
+            tvChatResult.append("我：");
+        } else {
+            tvChatResult.append(address);
+        }
+        tvChatResult.append("\n");
+        tvChatResult.append("    ");
+        tvChatResult.append(message + "\n");
+
+        // 将光标移到最后，实现滚动条的自动滚动
+        mUpdateHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                svChatResult.fullScroll(ScrollView.FOCUS_DOWN);
+            }
+        });
     }
 
     private void toast(String msg) {
@@ -201,13 +240,5 @@ public class FragmentServer extends Fragment {
         toast.setGravity(Gravity.CENTER, 0, 0);
         toast.show();
     }
-    
-    private void showStatus(String msg) {
-        Bundle messageBundle = new Bundle();
-        messageBundle.putString("msg", msg);
 
-        Message message = new Message();
-        message.setData(messageBundle);
-        mUpdateHandler.sendMessage(message);
-    }
 }

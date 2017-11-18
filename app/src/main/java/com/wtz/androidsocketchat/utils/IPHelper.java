@@ -1,4 +1,4 @@
-package com.wtz.androidsocketchat;
+package com.wtz.androidsocketchat.utils;
 
 import java.net.InetAddress;
 import java.net.NetworkInterface;

@@ -1,7 +1,8 @@
-package com.wtz.androidsocketchat;
+package com.wtz.androidsocketchat.model;
 
 import java.io.*;
 import java.net.*;
+import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
@@ -17,35 +18,37 @@ public class SocketServer {
     private Thread mServerStarter;
     
     private int QUEUE_CAPACITY = 10;
-    private BlockingQueue<String> mMessageQueue;
+    private ArrayList<BlockingQueue<String>> mMsgQueueList;
     
     private Handler mUpdateHandler;
     private Handler mReceivingHandler;
 
-    public SocketServer(int port, Handler updateHandler) {
+    public SocketServer(int port, Handler updateHandler) throws IOException {
         this.mUpdateHandler = updateHandler;
         mReceivingHandler = new Handler(mUpdateHandler.getLooper()) {
             @Override
             public void handleMessage(Message msg) {
-                String strMsg = (String) (msg != null ? msg.obj : "");
-                updateMessages(strMsg, false);
+                Bundle data = msg.getData();
+                if (data == null) {
+                    return;
+                }
+                String strMsg = "" + data.get("msg");
+                String address = "" + data.get("address");
+                boolean isLocal = data.getBoolean("isLocal");
+                updateMessages(isLocal, address, strMsg);
             }
         };
+
+        mSever = new ServerSocket(port);
+        mMsgQueueList = new ArrayList<BlockingQueue<String>>();
         
-        try {
-            mSever = new ServerSocket(port);
-            mMessageQueue = new ArrayBlockingQueue<String>(QUEUE_CAPACITY);
-            start();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        start();
     }
 
     private void start() {
         boolean hadStarted = hadStarted();
         Log.d(TAG, "start...mSever = " + mSever + ", hadStarted = " + hadStarted);
         if (mSever != null && !mSever.isClosed() && !hadStarted) {
-            //TODO------------------区分处理上边的判断！！！
             mServerStarter = new Thread(new Runnable() {
 
                 @Override
@@ -76,6 +79,9 @@ public class SocketServer {
     }
 
     private void beginListen() {
+        if (mSever == null) {
+            return;
+        }
         try {
             Log.d(TAG, "beginListen...mSever.accept");
             final Socket clientSocket = mSever.accept();
@@ -84,7 +90,9 @@ public class SocketServer {
             new Thread(new Runnable() {
                 public void run() {
                     try {
-                        new Thread(new SendingRunnable(clientSocket, mMessageQueue, TAG)).start();
+                        BlockingQueue<String> messageQueue = new ArrayBlockingQueue<String>(QUEUE_CAPACITY);
+                        mMsgQueueList.add(messageQueue);
+                        new Thread(new SendingRunnable(clientSocket, messageQueue, TAG)).start();
                         new Thread(new ReceivingRunnable(clientSocket, mReceivingHandler, TAG))
                                 .start();
                     } catch (Exception e) {
@@ -96,7 +104,7 @@ public class SocketServer {
             e.printStackTrace();
         }
     }
-    
+
     public void closeSocket() {
         if (mSever != null) {
             try {
@@ -109,28 +117,28 @@ public class SocketServer {
     }
     
     public void sendMsg(String msg) {
-        if (mMessageQueue == null) {
+        if (mMsgQueueList == null || mMsgQueueList.size() == 0) {
             return;
         }
 
-        mMessageQueue.add(msg);
-        updateMessages(msg, true);
+        for (BlockingQueue<String> queue : mMsgQueueList) {
+            queue.add(msg);
+        }
+        updateMessages(true, null, msg);
     }
     
-    private synchronized void updateMessages(String msg, boolean local) {
-        Log.e(TAG, "Updating message: " + msg);
+    private synchronized void updateMessages(boolean isLocal, String address, String msg) {
+        Log.e(TAG, "Updating message...isLocal: " + isLocal + ", from: " + address
+                + ", msg: " + msg);
+        if (mUpdateHandler != null) {
+            Bundle messageBundle = new Bundle();
+            messageBundle.putString("msg", msg);
+            messageBundle.putString("address", address);
+            messageBundle.putBoolean("isLocal", isLocal);
 
-        if (local) {
-            msg = "me: " + msg;
-        } else {
-            msg = "them: " + msg;
+            Message message = new Message();
+            message.setData(messageBundle);
+            mUpdateHandler.sendMessage(message);
         }
-
-        Bundle messageBundle = new Bundle();
-        messageBundle.putString("msg", msg);
-
-        Message message = new Message();
-        message.setData(messageBundle);
-        mUpdateHandler.sendMessage(message);
     }
 }
