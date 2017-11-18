@@ -1,0 +1,21 @@
+<resources>
+
+    <string name="app_name">简单聊天器</string>
+
+    <string name="local_ip">本机IP：</string>
+
+    <string name="client">客户端</string>
+
+    <string name="server">服务端</string>
+
+    <string name="send">发送</string>
+
+    <string name="connect">连接</string>
+
+    <string name="server_ip">对方IP和端口号：</string>
+
+    <string name="set_port">设定端口号：</string>
+
+    <string name="create">创建</string>
+
+</resources>

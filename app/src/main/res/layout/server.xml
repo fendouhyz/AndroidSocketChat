@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical" >
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="64dp"
+            android:layout_margin="3dp"
+            android:background="@drawable/bg_2"
+            android:gravity="center"
+            android:paddingLeft="3dp"
+            android:singleLine="true"
+            android:text="@string/set_port"
+            android:textSize="@dimen/text_size_1" />
+
+        <EditText
+            android:id="@+id/et_server_port_input"
+            android:layout_width="0px"
+            android:layout_height="64dp"
+            android:layout_margin="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_2"
+            android:cursorVisible="true"
+            android:inputType="textCapSentences"
+            android:padding="3px"
+            android:singleLine="true"
+            android:textSize="@dimen/text_size_1" />
+
+        <Button
+            android:id="@+id/btn_server_create"
+            android:layout_width="wrap_content"
+            android:layout_height="64dp"
+            android:layout_margin="3dp"
+            android:background="@drawable/bg_2"
+            android:text="@string/create"
+            android:textSize="@dimen/text_size_1" />
+    </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/sv_server_chat_result"
+        android:layout_width="match_parent"
+        android:layout_height="0px"
+        android:layout_margin="3dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_1" >
+
+        <TextView
+            android:id="@+id/tv_server_chat_result"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:textSize="@dimen/text_size_1" />
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+        <EditText
+            android:id="@+id/et_server_chat_input"
+            android:layout_width="0px"
+            android:layout_height="64dp"
+            android:layout_margin="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_2"
+            android:cursorVisible="true"
+            android:inputType="textCapSentences"
+            android:padding="3px"
+            android:singleLine="true"
+            android:textSize="@dimen/text_size_1" />
+
+        <Button
+            android:id="@+id/btn_server_send"
+            android:layout_width="wrap_content"
+            android:layout_height="64dp"
+            android:layout_margin="3dp"
+            android:background="@drawable/bg_2"
+            android:text="@string/send"
+            android:textSize="@dimen/text_size_1" />
+    </LinearLayout>
+
+</LinearLayout>
